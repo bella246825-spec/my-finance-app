@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一站式金融規劃工具</title>
+    <!-- 載入 Tailwind CSS (CSS/樣式) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Chart.js 視覺化圖表庫 (外部資源) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* 自定義 CSS 來設定字體和背景 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* 柔和的淺藍灰色背景 */
+        }
+        /* 確保 Chart.js Canvas 響應式 */
+        .chart-container {
+            height: 300px; 
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+        /* 隱藏原生數字輸入的箭頭 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-6 md:p-10">
+        <h1 class="text-4xl font-extrabold text-center mb-10 text-indigo-700">
+            📊 個人財務規劃中心
+        </h1>
+
+        <!-- 用戶資訊顯示 (重要：用於多人協作與資料庫驗證) -->
+        <p id="user-info" class="text-xs text-gray-500 text-right mb-4"></p>
+
+        <!-- 總體網格佈局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- A. 複利計算機 (佔 1 欄) -->
+            <div id="calculator-panel" class="lg:col-span-1 p-6 bg-indigo-50 rounded-lg shadow-md border border-indigo-200">
+                <h2 class="text-2xl font-bold mb-6 text-indigo-800 border-b pb-2">📈 每月複利計算機</h2>
+                
+                <div class="space-y-4">
+                    <!-- 初始本金, 每月投入金額, 年化報酬率, 投資年限... (略，保持不變) -->
+                    <div class="input-group">
+                        <label for="initial-principal" class="block text-sm font-medium text-gray-700">初始本金 (P) $</label>
+                        <input type="number" id="initial-principal" value="10000" min="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="input-group">
+                        <label for="monthly-contribution" class="block text-sm font-medium text-gray-700">每月定期投入金額 (M) $</label>
+                        <input type="number" id="monthly-contribution" value="5000" min="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="input-group">
+                        <label for="annual-rate" class="block text-sm font-medium text-gray-700">預期年化報酬率 (r) %</label>
+                        <input type="number" id="annual-rate" value="6" min="0" step="0.1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="input-group">
+                        <label for="years" class="block text-sm font-medium text-gray-700">投資年限 (n) 年</label>
+                        <input type="number" id="years" value="20" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <button onclick="calculateCompoundInterest()" class="w-full mt-6 py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-300">
+                    計算最終資產價值
+                </button>
+
+                <div id="result-display" class="mt-6 p-4 bg-white border border-green-300 rounded-md shadow-inner hidden">
+                    <!-- 計算結果顯示在這裡 -->
+                </div>
+            </div>
+
+            <!-- B. 資產配置追蹤器 (佔 2 欄) -->
+            <div id="allocation-panel" class="lg:col-span-2 p-6 bg-yellow-50 rounded-lg shadow-md border border-yellow-200">
+                <h2 class="text-2xl font-bold mb-6 text-yellow-800 border-b pb-2">📊 資產配置追蹤</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 輸入區 (略，保持不變) -->
+                    <div>
+                        <div id="allocation-inputs" class="space-y-3">
+                            <div class="flex space-x-2 allocation-row">
+                                <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="美國股票 (S&P)" placeholder="資產名稱">
+                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="60" min="0" max="100" placeholder="%">
+                                <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
+                            </div>
+                            <div class="flex space-x-2 allocation-row">
+                                <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="台灣股票 (ETF)" placeholder="資產名稱">
+                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="30" min="0" max="100" placeholder="%">
+                                <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
+                            </div>
+                            <div class="flex space-x-2 allocation-row">
+                                <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="現金/債券" placeholder="資產名稱">
+                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="10" min="0" max="100" placeholder="%">
+                                <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
+                            </div>
+                        </div>
+                        <button id="add-asset-btn" onclick="addAssetInput()" class="w-full mt-4 py-2 bg-yellow-400 text-yellow-900 font-semibold rounded-lg hover:bg-yellow-500 transition duration-300">
+                            + 新增資產類別
+                        </button>
+                        <button onclick="updateAllocationChart()" class="w-full mt-2 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition duration-300">
+                            更新配置圓餅圖
+                        </button>
+                        <p id="total-percent" class="text-center font-bold mt-3 text-lg"></p>
+                    </div>
+                    
+                    <!-- 圖表區 (略，保持不變) -->
+                    <div>
+                        <div class="chart-container">
+                            <canvas id="allocation-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- C. 股票快速連結 (佔所有欄位 - 新增輸入功能) -->
+            <div id="finance-panel" class="lg:col-span-3 p-6 bg-green-50 rounded-lg shadow-md border border-green-200">
+                <h2 class="text-2xl font-bold mb-6 text-green-800 border-b pb-2">🔗 實時觀察清單 (可自訂)</h2>
+
+                <!-- 新增股票輸入區 -->
+                <div class="flex flex-col md:flex-row gap-2 mb-6 p-4 bg-green-100 rounded-lg shadow-inner">
+                    <input type="text" id="new-stock-symbol" class="p-3 border rounded-md flex-grow" placeholder="輸入股票代碼，例如: TPE:2330 或 NASDAQ:GOOG">
+                    <input type="text" id="new-stock-name" class="p-3 border rounded-md flex-grow" placeholder="輸入股票名稱，例如: 台積電 或 Google">
+                    <button onclick="addNewStock()" class="py-3 px-6 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300 whitespace-nowrap">
+                        新增至清單
+                    </button>
+                </div>
+                
+                <p class="text-sm text-gray-600 mb-4">點擊名稱將在新視窗中導向 Google 財經，點擊 **[X]** 即可從清單中移除。</p>
+                
+                <!-- 實時連結顯示區 -->
+                <div id="stock-links" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <!-- 連結將透過 Firestore 數據實時載入 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Firebase SDKs for Authentication and Firestore -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // 設置 Firebase 全域變數
+    let app, db, auth, userId;
+    let isAuthReady = false;
+
+    // Canvas 提供的全域變數 (請勿修改這三個變數)
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-finance-app';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // --- Firebase 初始化 ---
+    async function initFirebase() {
+        if (!firebaseConfig) {
+            console.error("Firebase Configuration is missing.");
+            return;
+        }
+
+        try {
+            // 1. 初始化 Firebase 服務
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            setLogLevel('debug'); // 啟用 Firetore Debug Log
+
+            // 2. 處理身份驗證
+            if (initialAuthToken) {
+                // 使用提供的 Token 登入 (Canvas 環境)
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                // 如果沒有 Token，則使用匿名登入 (一般靜態託管環境)
+                await signInAnonymously(auth);
+            }
+
+            // 3. 監聽身份驗證狀態變化
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    isAuthReady = true;
+                    // 顯示用戶 ID
+                    document.getElementById('user-info').textContent = `您的用戶ID: ${userId} (此清單為私有)`; 
+                    
+                    // 4. 身份驗證完成後，開始監聽資料庫
+                    startWatchlistListener();
+                } else {
+                    isAuthReady = true;
+                    userId = crypto.randomUUID(); // 未登入也給一個隨機 ID
+                    document.getElementById('user-info').textContent = `用戶狀態: 未驗證 (ID: ${userId})`;
+                }
+            });
+
+        } catch (error) {
+            console.error("Firebase Initialization Error:", error);
+        }
+    }
+
+    // --- Firestore 路徑定義 ---
+    // 使用私人路徑，確保每個用戶只能看到自己的觀察清單
+    // 路徑結構: /artifacts/{appId}/users/{userId}/stock_watchlist
+    const watchlistPath = (uid) => `artifacts/${appId}/users/${uid}/stock_watchlist`; 
+
+    // --- 實時監聽觀察清單 ---
+    function startWatchlistListener() {
+        if (!db || !isAuthReady || !userId) return;
+
+        // 使用私人路徑
+        const stockCollectionRef = collection(db, watchlistPath(userId)); // <-- 傳入 userId
+        
+        // 實時監聽 (onSnapshot)
+        onSnapshot(stockCollectionRef, (snapshot) => {
+            const stocks = [];
+            snapshot.forEach(doc => {
+                stocks.push({ id: doc.id, ...doc.data() });
+            });
+            
+            // 將獲取的 stocks 列表傳遞給渲染函數
+            renderStockLinks(stocks);
+        }, (error) => {
+            console.error("Error listening to watchlist:", error);
+            // 可以在這裡顯示一個 UI 錯誤提示給用戶
+        });
+    }
+
+    // --- 新增股票到 Firestore ---
+    window.addNewStock = async function() {
+        if (!db || !isAuthReady || !userId) {
+            console.error("Database or User is not ready.");
+            return;
+        }
+
+        const symbolInput = document.getElementById('new-stock-symbol');
+        const nameInput = document.getElementById('new-stock-name');
+        
+        const symbol = symbolInput.value.trim().toUpperCase();
+        const name = nameInput.value.trim();
+
+        if (!symbol) {
+            // 為了避免 confirm 彈窗造成環境中斷，這裡改為控制台警告
+            console.warn('請輸入有效的股票代碼！'); 
+            return;
+        }
+        
+        // 確保符號是 Google 財經格式 (例如: TPE:2330 或 NASDAQ:GOOG)
+        if (!symbol.includes(':')) {
+            // 為了避免 confirm 彈窗造成環境中斷，這裡改為控制台警告
+            console.warn('股票代碼格式應為 [交易所:代碼]，例如 NASDAQ:GOOG 或 TPE:2330。');
+            return;
+        }
+
+        try {
+            // 使用私人路徑
+            const stockCollectionRef = collection(db, watchlistPath(userId)); // <-- 傳入 userId
+            await addDoc(stockCollectionRef, {
+                symbol: symbol,
+                name: name || symbol, // 如果名稱為空，則使用代碼
+                userId: userId, // 記錄是誰新增的 (雖然在私人清單中，但依然是個好的記錄習慣)
+                timestamp: Date.now()
+            });
+
+            // 清空輸入欄位
+            symbolInput.value = '';
+            nameInput.value = '';
+
+        } catch (e) {
+            console.error("Error adding stock:", e);
+        }
+    }
+
+    // --- 從 Firestore 刪除股票 ---
+    window.removeStock = async function(docId) {
+        if (!db || !isAuthReady || !userId) {
+            console.error("Database or User is not ready.");
+            return;
+        }
+        
+        // 為了避免 confirm 彈窗在 iFrame 環境中造成問題，這裡將直接執行刪除操作。
+        try {
+            // 使用私人路徑
+            const docRef = doc(db, watchlistPath(userId), docId); // <-- 傳入 userId
+            await deleteDoc(docRef);
+        } catch (e) {
+            console.error("Error deleting stock:", e);
+        }
+    }
+
+    // --- C. 股票快速連結渲染功能 (現在從 Firestore 數據渲染) ---
+    function generateFinanceUrl(symbol) {
+        return `https://www.google.com/finance/quote/${symbol}`;
+    }
+    
+    function renderStockLinks(stocks) {
+        const container = document.getElementById('stock-links');
+        if (!container) return; 
+
+        let htmlContent = '';
+
+        stocks.forEach(stock => {
+            const url = generateFinanceUrl(stock.symbol);
+            htmlContent += `
+                <div class="p-4 bg-white rounded-lg shadow hover:shadow-lg transition duration-200 flex items-center justify-between border border-green-300">
+                    <a class="stock-link flex-grow text-left pr-2" 
+                       href="${url}" 
+                       target="_blank" 
+                       title="點擊前往 Google 財經">
+                        <span class="text-xl font-extrabold text-green-700 block">${stock.symbol.split(':')[1] || stock.symbol}</span>
+                        <span class="text-sm text-gray-500 block">${stock.name}</span>
+                    </a>
+                    <button class="text-red-500 hover:text-red-700 font-bold text-lg p-1" 
+                            onclick="removeStock('${stock.id}')"
+                            title="移除此股票">
+                        &times;
+                    </button>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = htmlContent;
+    }
+
+    // 初始化 Firebase
+    initFirebase();
+</script>
+
+<script>
+    // --- 複利計算功能 (保持不變) ---
+    function calculateCompoundInterest() {
+        const P = parseFloat(document.getElementById('initial-principal').value) || 0; 
+        const M_monthly = parseFloat(document.getElementById('monthly-contribution').value) || 0; 
+        const r_percent = parseFloat(document.getElementById('annual-rate').value) || 0; 
+        const n_years = parseInt(document.getElementById('years').value) || 0; 
+        
+        const r_monthly = (r_percent / 100) / 12; 
+        const N_months = n_years * 12; 
+        
+        let FV_P = P * Math.pow(1 + r_monthly, N_months);
+        
+        let FV_M = 0;
+        if (r_monthly === 0) {
+            FV_M = M_monthly * N_months;
+        } else {
+            const factor = (Math.pow(1 + r_monthly, N_months) - 1) / r_monthly;
+            FV_M = M_monthly * factor * (1 + r_monthly);
+        }
+
+        const FV = FV_P + FV_M; 
+        const totalPrincipal = P + (M_monthly * N_months); 
+        const totalInterest = FV - totalPrincipal; 
+        
+        const formatter = new Intl.NumberFormat('en-US', { 
+            style: 'currency', 
+            currency: 'USD', 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
+        const resultDisplay = document.getElementById('result-display');
+        
+        resultDisplay.innerHTML = `
+            <div class="space-y-2">
+                <p class="text-sm text-gray-700">總投資期數：<span class="font-bold">${N_months} 個月 (${n_years} 年)</span></p>
+                <p class="text-sm text-gray-700">總投入本金：<span class="font-bold text-indigo-600">${formatter.format(totalPrincipal)}</span></p>
+                <p class="text-lg font-extrabold text-green-700">最終資產總值 (FV)：<span class="text-2xl">${formatter.format(FV)}</span></p>
+                <p class="text-sm text-gray-700">總獲利/利息：<span class="font-bold text-green-600">${formatter.format(totalInterest)}</span></p>
+            </div>
+        `;
+        resultDisplay.classList.remove('hidden');
+    }
+
+    // --- 資產配置功能 (保持不變) ---
+    let allocationChart = null; 
+    
+    function getChartContext() {
+        const canvas = document.getElementById('allocation-chart');
+        return canvas ? canvas.getContext('2d') : null;
+    }
+
+    window.addAssetInput = function() { 
+        const container = document.getElementById('allocation-inputs');
+        const newRow = document.createElement('div');
+        newRow.classList.add('flex', 'space-x-2', 'allocation-row');
+        newRow.innerHTML = `
+            <input type="text" class="asset-name p-2 border rounded-md w-1/2" placeholder="資產名稱">
+            <input type="number" class="asset-percent p-2 border rounded-md w-1/4" min="0" max="100" placeholder="%">
+            <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
+        `;
+        container.appendChild(newRow);
+    }
+    
+    window.removeAsset = function(buttonElement) { 
+        const row = buttonElement.parentNode; 
+        row.parentNode.removeChild(row); 
+        updateAllocationChart(); 
+    }
+    
+    window.updateAllocationChart = function() { 
+        try {
+            if (typeof Chart === 'undefined') {
+                console.warn("Chart.js 尚未載入，無法繪製圖表。");
+                return;
+            }
+
+            const ctx = getChartContext();
+            if (!ctx) {
+                console.error("Canvas 元素或 Context 未找到。");
+                return;
+            }
+
+            const names = Array.from(document.querySelectorAll('.asset-name')).map(input => input.value || '未命名');
+            const percentages = Array.from(document.querySelectorAll('.asset-percent')).map(input => parseFloat(input.value) || 0);
+            const totalPercent = percentages.reduce((sum, p) => sum + p, 0);
+            
+            const totalPercentDisplay = document.getElementById('total-percent');
+            totalPercentDisplay.textContent = `總比例: ${totalPercent.toFixed(1)}%`;
+            totalPercentDisplay.className = totalPercentDisplay.className.replace(/text-[\w-]+/, totalPercent.toFixed(1) === '100.0' ? 'text-green-600' : 'text-red-600');
+            
+            if (percentages.length === 0 || totalPercent === 0) { 
+                if (allocationChart) { allocationChart.destroy(); allocationChart = null; } 
+                return; 
+            }
+            
+            const generateColors = (count) => { 
+                const colors = []; 
+                for (let i = 0; i < count; i++) { 
+                    const hue = (i * 137.508) % 360; 
+                    colors.push(`hsl(${hue}, 70%, 50%)`); 
+                } 
+                return colors; 
+            };
+            const backgroundColors = generateColors(percentages.length);
+            
+            const data = { 
+                labels: names, 
+                datasets: [{ 
+                    data: percentages, 
+                    backgroundColor: backgroundColors, 
+                    hoverOffset: 8,
+                    borderRadius: 5
+                }] 
+            };
+            
+            const config = { 
+                type: 'doughnut', 
+                data: data, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'right', 
+                        }, 
+                        title: { 
+                            display: true, 
+                            text: '當前資產配置圓餅圖', 
+                            font: { size: 18 } 
+                        } 
+                    } 
+                } 
+            };
+            
+            if (allocationChart) { allocationChart.destroy(); }
+            allocationChart = new Chart(ctx, config);
+
+        } catch (e) {
+            console.error("資產配置圖表初始化錯誤:", e);
+        }
+    }
+    
+    // --- 頁面載入完成後執行 ---
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(() => {
+            updateAllocationChart(); 
+        }, 100); 
+    });
+</script>
+
+</body>
+</html>
