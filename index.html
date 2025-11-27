@@ -79,25 +79,26 @@
 
             <!-- B. 資產配置追蹤器 (佔 2 欄) -->
             <div id="allocation-panel" class="lg:col-span-2 p-6 bg-yellow-50 rounded-lg shadow-md border border-yellow-200">
-                <h2 class="text-2xl font-bold mb-6 text-yellow-800 border-b pb-2">📊 資產配置追蹤</h2>
+                <h2 class="text-2xl font-bold mb-6 text-yellow-800 border-b pb-2">📊 資產配置追蹤 (輸入金額)</h2>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- 輸入區 (略，保持不變) -->
+                    <!-- 輸入區：已從百分比改為金額 -->
                     <div>
                         <div id="allocation-inputs" class="space-y-3">
+                            <!-- 預設資產列 (輸入金額) -->
                             <div class="flex space-x-2 allocation-row">
                                 <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="美國股票 (S&P)" placeholder="資產名稱">
-                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="60" min="0" max="100" placeholder="%">
+                                <input type="number" class="asset-amount p-2 border rounded-md w-1/4" value="60000" min="0" placeholder="金額 $">
                                 <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
                             </div>
                             <div class="flex space-x-2 allocation-row">
                                 <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="台灣股票 (ETF)" placeholder="資產名稱">
-                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="30" min="0" max="100" placeholder="%">
+                                <input type="number" class="asset-amount p-2 border rounded-md w-1/4" value="30000" min="0" placeholder="金額 $">
                                 <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
                             </div>
                             <div class="flex space-x-2 allocation-row">
                                 <input type="text" class="asset-name p-2 border rounded-md w-1/2" value="現金/債券" placeholder="資產名稱">
-                                <input type="number" class="asset-percent p-2 border rounded-md w-1/4" value="10" min="0" max="100" placeholder="%">
+                                <input type="number" class="asset-amount p-2 border rounded-md w-1/4" value="10000" min="0" placeholder="金額 $">
                                 <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
                             </div>
                         </div>
@@ -107,6 +108,7 @@
                         <button onclick="updateAllocationChart()" class="w-full mt-2 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition duration-300">
                             更新配置圓餅圖
                         </button>
+                        <!-- 總計顯示現在顯示的是總資產金額 -->
                         <p id="total-percent" class="text-center font-bold mt-3 text-lg"></p>
                     </div>
                     
@@ -119,7 +121,7 @@
                 </div>
             </div>
             
-            <!-- C. 股票快速連結 (佔所有欄位 - 新增輸入功能) -->
+            <!-- C. 股票快速連結 (佔所有欄位 - 實時清單) -->
             <div id="finance-panel" class="lg:col-span-3 p-6 bg-green-50 rounded-lg shadow-md border border-green-200">
                 <h2 class="text-2xl font-bold mb-6 text-green-800 border-b pb-2">🔗 實時觀察清單 (可自訂)</h2>
 
@@ -151,40 +153,49 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 設置 Firebase 全域變數
     let app, db, auth, userId;
     let isAuthReady = false;
     let currentStocks = []; // 儲存目前的股票清單，用於搜尋過濾
 
-    // Canvas 提供的全域變數 (請勿修改這三個變數)
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-finance-app';
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    // ***************************************************************
+    // ** 步驟一：使用 Canvas 環境提供的配置和身份驗證 **
+    // ***************************************************************
+    
+    // 獲取環境變數
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'finance-planner-v1';
+    // 檢查並解析 Firebase 配置
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' && __firebase_config !== '' ? __firebase_config : '{}');
     const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
+    // ***************************************************************
+    // ** 步驟二：初始化與登入邏輯 (使用環境變數) **
+    // ***************************************************************
+    
     // --- Firebase 初始化 ---
     async function initFirebase() {
-        if (!firebaseConfig) {
-            console.error("Firebase Configuration is missing.");
+        if (Object.keys(firebaseConfig).length === 0) {
+            console.error("Firebase Configuration is missing from environment. Database features will fail.");
+            document.getElementById('user-info').textContent = `錯誤: 環境配置遺失。資料庫功能無法使用。`;
             return;
         }
 
         try {
-            // 1. 初始化 Firebase 服務
-            app = initializeApp(firebaseConfig);
+            // 1. 初始化 Firebase 服務 (使用環境配置)
+            app = initializeApp(firebaseConfig); 
             db = getFirestore(app);
             auth = getAuth(app);
-            setLogLevel('debug'); // 啟用 Firetore Debug Log
+            setLogLevel('debug'); 
 
-            // 2. 處理身份驗證
+            // 2. 登入：使用 Custom Token (如果可用) 或匿名登入
             if (initialAuthToken) {
-                // 使用提供的 Token 登入 (Canvas 環境)
                 await signInWithCustomToken(auth, initialAuthToken);
             } else {
-                // 如果沒有 Token，則使用匿名登入 (一般靜態託管環境)
                 await signInAnonymously(auth);
             }
+
 
             // 3. 監聽身份驗證狀態變化
             onAuthStateChanged(auth, (user) => {
@@ -192,19 +203,20 @@
                     userId = user.uid;
                     isAuthReady = true;
                     // 顯示用戶 ID
-                    document.getElementById('user-info').textContent = `您的用戶ID: ${userId} (此清單為私有)`; 
+                    document.getElementById('user-info').textContent = `您的用戶ID (環境配置): ${userId} (此清單為私有)`; 
                     
                     // 4. 身份驗證完成後，開始監聽資料庫
                     startWatchlistListener();
                 } else {
                     isAuthReady = true;
-                    userId = crypto.randomUUID(); // 未登入也給一個隨機 ID
-                    document.getElementById('user-info').textContent = `用戶狀態: 未驗證 (ID: ${userId})`;
+                    userId = 'unauthenticated-error'; // 登入失敗的 ID
+                    document.getElementById('user-info').textContent = `用戶狀態: 登入失敗`;
                 }
             });
 
         } catch (error) {
             console.error("Firebase Initialization Error:", error);
+            document.getElementById('user-info').textContent = `錯誤: Firebase 初始化失敗。請檢查設定。`;
         }
     }
 
@@ -400,7 +412,7 @@
         resultDisplay.classList.remove('hidden');
     }
 
-    // --- 資產配置功能 (保持不變) ---
+    // --- 資產配置功能 (已修改為輸入金額並計算百分比) ---
     let allocationChart = null; 
     
     function getChartContext() {
@@ -414,7 +426,7 @@
         newRow.classList.add('flex', 'space-x-2', 'allocation-row');
         newRow.innerHTML = `
             <input type="text" class="asset-name p-2 border rounded-md w-1/2" placeholder="資產名稱">
-            <input type="number" class="asset-percent p-2 border rounded-md w-1/4" min="0" max="100" placeholder="%">
+            <input type="number" class="asset-amount p-2 border rounded-md w-1/4" min="0" placeholder="金額 $">
             <button class="remove-btn bg-red-500 text-white p-2 rounded-md w-1/4 hover:bg-red-600" onclick="removeAsset(this)">移除</button>
         `;
         container.appendChild(newRow);
@@ -439,19 +451,41 @@
                 return;
             }
 
+            // 1. 取得資產名稱和金額
             const names = Array.from(document.querySelectorAll('.asset-name')).map(input => input.value || '未命名');
-            const percentages = Array.from(document.querySelectorAll('.asset-percent')).map(input => parseFloat(input.value) || 0);
-            const totalPercent = percentages.reduce((sum, p) => sum + p, 0);
+            const amounts = Array.from(document.querySelectorAll('.asset-amount')).map(input => parseFloat(input.value) || 0);
             
+            // 2. 計算總資產金額
+            const totalAmount = amounts.reduce((sum, a) => sum + a, 0);
+            let percentages = [];
+            
+            // 3. 計算各資產的百分比
+            if (totalAmount > 0) {
+                percentages = amounts.map(amount => (amount / totalAmount) * 100);
+            } else {
+                percentages = amounts.map(() => 0); // 總金額為 0 時，所有百分比為 0
+            }
+
+            // 格式化總資產顯示 (USD 格式，無小數點)
+            const formatter = new Intl.NumberFormat('en-US', { 
+                style: 'currency', 
+                currency: 'USD', 
+                minimumFractionDigits: 0, 
+                maximumFractionDigits: 0 
+            });
+
+            // 更新總資產顯示
             const totalPercentDisplay = document.getElementById('total-percent');
-            totalPercentDisplay.textContent = `總比例: ${totalPercent.toFixed(1)}%`;
-            totalPercentDisplay.className = totalPercentDisplay.className.replace(/text-[\w-]+/, totalPercent.toFixed(1) === '100.0' ? 'text-green-600' : 'text-red-600');
+            totalPercentDisplay.textContent = `總資產: ${formatter.format(totalAmount)}`;
+            totalPercentDisplay.className = totalPercentDisplay.className.replace(/text-[\w-]+/g, 'text-blue-600');
             
-            if (percentages.length === 0 || totalPercent === 0) { 
+            // 如果沒有有效的資產，則銷毀圖表
+            if (amounts.length === 0 || totalAmount === 0) { 
                 if (allocationChart) { allocationChart.destroy(); allocationChart = null; } 
                 return; 
             }
             
+            // 隨機顏色生成器
             const generateColors = (count) => { 
                 const colors = []; 
                 for (let i = 0; i < count; i++) { 
@@ -462,10 +496,11 @@
             };
             const backgroundColors = generateColors(percentages.length);
             
+            // 圖表數據
             const data = { 
                 labels: names, 
                 datasets: [{ 
-                    data: percentages, 
+                    data: percentages, // 使用計算出的百分比
                     backgroundColor: backgroundColors, 
                     hoverOffset: 8,
                     borderRadius: 5
@@ -484,7 +519,7 @@
                         }, 
                         title: { 
                             display: true, 
-                            text: '當前資產配置圓餅圖', 
+                            text: '當前資產配置百分比', // 更新標題
                             font: { size: 18 } 
                         } 
                     } 
