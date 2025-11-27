@@ -124,12 +124,17 @@
                 <h2 class="text-2xl font-bold mb-6 text-green-800 border-b pb-2">🔗 實時觀察清單 (可自訂)</h2>
 
                 <!-- 新增股票輸入區 -->
-                <div class="flex flex-col md:flex-row gap-2 mb-6 p-4 bg-green-100 rounded-lg shadow-inner">
+                <div class="flex flex-col md:flex-row gap-2 mb-4 p-4 bg-green-100 rounded-lg shadow-inner">
                     <input type="text" id="new-stock-symbol" class="p-3 border rounded-md flex-grow" placeholder="輸入股票代碼，例如: TPE:2330 或 NASDAQ:GOOG">
                     <input type="text" id="new-stock-name" class="p-3 border rounded-md flex-grow" placeholder="輸入股票名稱，例如: 台積電 或 Google">
                     <button onclick="addNewStock()" class="py-3 px-6 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition duration-300 whitespace-nowrap">
                         新增至清單
                     </button>
+                </div>
+
+                <!-- 搜尋過濾區 -->
+                <div class="mb-4">
+                    <input type="text" id="search-stock-input" class="w-full p-3 border rounded-md border-green-300 focus:border-green-500 focus:ring-green-500" placeholder="🔍 搜尋清單中的股票 (代碼或名稱)...">
                 </div>
                 
                 <p class="text-sm text-gray-600 mb-4">點擊名稱將在新視窗中導向 Google 財經，點擊 **[X]** 即可從清單中移除。</p>
@@ -151,6 +156,7 @@
     // 設置 Firebase 全域變數
     let app, db, auth, userId;
     let isAuthReady = false;
+    let currentStocks = []; // 儲存目前的股票清單，用於搜尋過濾
 
     // Canvas 提供的全域變數 (請勿修改這三個變數)
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-finance-app';
@@ -221,13 +227,30 @@
                 stocks.push({ id: doc.id, ...doc.data() });
             });
             
-            // 將獲取的 stocks 列表傳遞給渲染函數
-            renderStockLinks(stocks);
+            currentStocks = stocks; // 更新本地暫存
+            filterAndRenderStocks(); // 執行過濾並渲染
         }, (error) => {
             console.error("Error listening to watchlist:", error);
             // 可以在這裡顯示一個 UI 錯誤提示給用戶
         });
     }
+
+    // --- 搜尋與過濾功能 ---
+    function filterAndRenderStocks() {
+        const searchTerm = document.getElementById('search-stock-input').value.trim().toLowerCase();
+        
+        const filteredStocks = currentStocks.filter(stock => {
+            const symbol = stock.symbol.toLowerCase();
+            const name = stock.name.toLowerCase();
+            return symbol.includes(searchTerm) || name.includes(searchTerm);
+        });
+
+        renderStockLinks(filteredStocks);
+    }
+
+    // 綁定搜尋框事件
+    document.getElementById('search-stock-input').addEventListener('input', filterAndRenderStocks);
+
 
     // --- 新增股票到 Firestore ---
     window.addNewStock = async function() {
@@ -302,25 +325,29 @@
 
         let htmlContent = '';
 
-        stocks.forEach(stock => {
-            const url = generateFinanceUrl(stock.symbol);
-            htmlContent += `
-                <div class="p-4 bg-white rounded-lg shadow hover:shadow-lg transition duration-200 flex items-center justify-between border border-green-300">
-                    <a class="stock-link flex-grow text-left pr-2" 
-                       href="${url}" 
-                       target="_blank" 
-                       title="點擊前往 Google 財經">
-                        <span class="text-xl font-extrabold text-green-700 block">${stock.symbol.split(':')[1] || stock.symbol}</span>
-                        <span class="text-sm text-gray-500 block">${stock.name}</span>
-                    </a>
-                    <button class="text-red-500 hover:text-red-700 font-bold text-lg p-1" 
-                            onclick="removeStock('${stock.id}')"
-                            title="移除此股票">
-                        &times;
-                    </button>
-                </div>
-            `;
-        });
+        if (stocks.length === 0) {
+            htmlContent = '<p class="text-gray-500 col-span-full text-center py-4">沒有符合的股票</p>';
+        } else {
+            stocks.forEach(stock => {
+                const url = generateFinanceUrl(stock.symbol);
+                htmlContent += `
+                    <div class="p-4 bg-white rounded-lg shadow hover:shadow-lg transition duration-200 flex items-center justify-between border border-green-300">
+                        <a class="stock-link flex-grow text-left pr-2" 
+                           href="${url}" 
+                           target="_blank" 
+                           title="點擊前往 Google 財經">
+                            <span class="text-xl font-extrabold text-green-700 block">${stock.symbol.split(':')[1] || stock.symbol}</span>
+                            <span class="text-sm text-gray-500 block">${stock.name}</span>
+                        </a>
+                        <button class="text-red-500 hover:text-red-700 font-bold text-lg p-1" 
+                                onclick="removeStock('${stock.id}')"
+                                title="移除此股票">
+                            &times;
+                        </button>
+                    </div>
+                `;
+            });
+        }
         
         container.innerHTML = htmlContent;
     }
